@@ -1,2 +1,6 @@
 .idea
-midi/
+venv
+genre_dataset_reduced/*
+src/deutschl
+src/midi resources
+src/genre classificator/data_10.json
