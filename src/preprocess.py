@@ -1,8 +1,18 @@
+import re
+import io
 import os
 import music21 as m21
 import json
 import tensorflow.keras as keras
 import numpy as np
+import pandas as pd
+
+# google drive imports
+from googleapiclient.discovery import build
+import pickle
+from google.auth.transport.requests import Request
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.http import MediaIoBaseDownload
 
 KERN_DATASET_PATH = "deutschl/test"
 ACCEPTABLE_DURATIONS = [
@@ -12,6 +22,16 @@ SAVE_DIR = "dataset"
 SINGLE_FILE_DATASET = "file_dataset"
 SEQUENCE_LENGTH = 64
 MAPPING_PATH = 'mapping.json'
+MY_MELODIES_CSV_PATH = "my_melodies.csv"
+MIDI_MELODIES_PATH = "midi resources\\melodies"
+
+# google drive consts
+CLIENT_ID = "837354965689-3cgu6kg68fdg4gijgit7786msc4nt6ba.apps.googleusercontent.com"
+CLIENT_SECRET = "MScoYrhOlc2PwYNYlps_GYTN"
+CLIENT_SECRET_FILE = 'credentials.json'
+API_NAME = "drive"
+API_VERSION = 'v3'
+SCOPES = ["https://www.googleapis.com/auth/drive"]
 
 
 def load_songs_in_kern(dataset_path):
@@ -200,5 +220,89 @@ def main():
     print(inputs, targets)
 
 
+def normalize_my_melodies_csv(csv_path):
+    df_uncleaned = pd.read_csv(csv_path)
+    df_uncleaned.columns = ["timestamp", "email", "mood", "artist_name", "song_name", "bpm", "key", "instrument",
+                            "main_genre", "second_genre", "midi_download_url"]
+    df_uncleaned.info()
+
+    file_names = []
+    for i in range(len(df_uncleaned['timestamp'])):
+        clean_file_name = str(i + 1) + " " + df_uncleaned['artist_name'][i] + " - " + df_uncleaned['song_name'][
+            i] + " ({})".format(df_uncleaned['instrument'][i]) + " " + str(df_uncleaned['bpm'][i]) + "bpm " + df_uncleaned['key'][i] + ".mid"
+        clean_file_name = re.sub(r'[\\/*?:"<>|]', "", clean_file_name)
+        file_names.append(clean_file_name)
+
+    midi_pathes = download_midi_from_google_drive(df_uncleaned['midi_download_url'], file_names)
+
+    df_uncleaned['midi_local_path'] = midi_pathes
+
+    df_uncleaned.to_csv("clean_melodies_data.csv")
+
+
+def Create_Service(client_secret_file, api_name, api_version, *scopes):
+    print(client_secret_file, api_name, api_version, scopes, sep='-')
+    CLIENT_SECRET_FILE = client_secret_file
+    API_SERVICE_NAME = api_name
+    API_VERSION = api_version
+    SCOPES = [scope for scope in scopes[0]]
+    print(SCOPES)
+
+    cred = None
+
+    pickle_file = f'token_{API_SERVICE_NAME}_{API_VERSION}.pickle'
+    # print(pickle_file)
+
+    if os.path.exists(pickle_file):
+        with open(pickle_file, 'rb') as token:
+            cred = pickle.load(token)
+
+    if not cred or not cred.valid:
+        if cred and cred.expired and cred.refresh_token:
+            cred.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(CLIENT_SECRET_FILE, SCOPES)
+            cred = flow.run_local_server()
+
+        with open(pickle_file, 'wb') as token:
+            pickle.dump(cred, token)
+
+    try:
+        service = build(API_SERVICE_NAME, API_VERSION, credentials=cred)
+        print(API_SERVICE_NAME, 'service created successfully')
+        return service
+    except Exception as e:
+        print('Unable to connect.')
+        print(e)
+        return None
+
+
+def download_midi_from_google_drive(urls, file_names):
+    service = Create_Service(CLIENT_SECRET_FILE, API_NAME, API_VERSION, SCOPES)
+    file_ids = [s.split("id=")[1] for s in urls]
+    midi_pathes = []
+
+    for file_id, file_name in zip(file_ids, file_names):
+        request = service.files().get_media(fileId=file_id)
+        fh = io.BytesIO()
+        downloader = MediaIoBaseDownload(fd=fh, request=request)
+        done = False
+
+        while not done:
+            status, done = downloader.next_chunk()
+            print("Download progress {0}".format(status.progress() * 100))
+
+            fh.seek(0)
+
+            current_file_path = os.path.join(MIDI_MELODIES_PATH, file_name)
+            midi_pathes.append(current_file_path)
+
+            with open(current_file_path, 'wb') as f:
+                f.write(fh.read())
+                f.close()
+
+    return midi_pathes
+
+
 if __name__ == "__main__":
-    main()
+    normalize_my_melodies_csv(MY_MELODIES_CSV_PATH)
