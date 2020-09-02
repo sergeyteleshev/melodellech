@@ -19,10 +19,10 @@ ACCEPTABLE_DURATIONS = [
     0.25, 0.5, 0.75, 1.0, 1.5, 2, 3, 4
 ]
 SAVE_DIR = "dataset"
-SINGLE_FILE_DATASET = "file_dataset"
+SINGLE_FILE_DATASET = "output/file_dataset"
 SEQUENCE_LENGTH = 64
-MAPPING_PATH = 'mapping.json'
-MY_MELODIES_CSV_PATH = "my_melodies.csv"
+MAPPING_PATH = 'output/mapping.json'
+MY_MELODIES_CSV_PATH = "csv/my_melodies.csv"
 MIDI_MELODIES_PATH = "midi resources\\melodies"
 
 # google drive consts
@@ -46,6 +46,43 @@ def load_songs_in_kern(dataset_path):
                 song = m21.converter.parse(os.path.join(path, file))
                 songs.append(song)
     return songs
+
+
+def load_songs_in_mid(dataset_path):
+    songs = []
+
+    # go through all the files in dataset and load them with music21
+    for path, subdirs, files in os.walk(dataset_path):
+        for file in files:
+
+            # consider only kern files
+            if file[-3:] == "mid":
+                song = m21.converter.parse(os.path.join(path, file))
+                songs.append(song)
+    return songs
+
+
+def preprocess_midi(dataset_path):
+    print("Loading songs...")
+    songs = load_songs_in_mid(dataset_path)
+    print(f"Loaded {len(songs)} songs.")
+
+    for i, song in enumerate(songs):
+
+        # filter out songs that have non-acceptable durations
+        # if not has_acceptable_durations(song, ACCEPTABLE_DURATIONS):
+        #     continue
+
+        # transpose songs to Cmaj/Amin
+        song = transpose(song)
+
+        # encode songs with music time series representation
+        encoded_song = encode_song(song)
+
+        # save songs to text file
+        save_path = os.path.join(SAVE_DIR, str(i))
+        with open(save_path, "w") as fp:
+            fp.write(encoded_song)
 
 
 def preprocess(dataset_path):
@@ -76,7 +113,7 @@ def transpose(song):
     # get key from the song
     parts = song.getElementsByClass(m21.stream.Part)
     measures_part0 = parts[0].getElementsByClass(m21.stream.Measure)
-    key = measures_part0[0][4]
+    key = []
 
     # estimate key using music21
     if not isinstance(key, m21.key.Key):
@@ -102,6 +139,7 @@ def has_acceptable_durations(song, acceptable_durations):
 
 def encode_song(song, time_step=0.25):
     encoded_song = []
+    symbol = ''
 
     for event in song.flat.notesAndRests:
 
@@ -212,6 +250,14 @@ def generate_training_sequences(sequence_length):
     return inputs, targets
 
 
+def main_midi():
+    preprocess_midi(MIDI_MELODIES_PATH)
+    songs = create_single_file_dataset(SAVE_DIR, SINGLE_FILE_DATASET, SEQUENCE_LENGTH)
+    create_mapping(songs, MAPPING_PATH)
+    inputs, targets = generate_training_sequences(SEQUENCE_LENGTH)
+    print(inputs, targets)
+
+
 def main():
     preprocess(KERN_DATASET_PATH)
     songs = create_single_file_dataset(SAVE_DIR, SINGLE_FILE_DATASET, SEQUENCE_LENGTH)
@@ -233,14 +279,14 @@ def normalize_my_melodies_csv(csv_path):
         clean_file_name = re.sub(r'[\\/*?:"<>|]', "", clean_file_name)
         file_names.append(clean_file_name)
 
-    midi_pathes = download_midi_from_google_drive(df_uncleaned['midi_download_url'], file_names)
+    midi_pathes = download_midis_from_google_drive(df_uncleaned['midi_download_url'], file_names)
 
     df_uncleaned['midi_local_path'] = midi_pathes
 
     df_uncleaned.to_csv("clean_melodies_data.csv")
 
 
-def Create_Service(client_secret_file, api_name, api_version, *scopes):
+def create_service(client_secret_file, api_name, api_version, *scopes):
     print(client_secret_file, api_name, api_version, scopes, sep='-')
     CLIENT_SECRET_FILE = client_secret_file
     API_SERVICE_NAME = api_name
@@ -277,8 +323,8 @@ def Create_Service(client_secret_file, api_name, api_version, *scopes):
         return None
 
 
-def download_midi_from_google_drive(urls, file_names):
-    service = Create_Service(CLIENT_SECRET_FILE, API_NAME, API_VERSION, SCOPES)
+def download_midis_from_google_drive(urls, file_names):
+    service = create_service(CLIENT_SECRET_FILE, API_NAME, API_VERSION, SCOPES)
     file_ids = [s.split("id=")[1] for s in urls]
     midi_pathes = []
 
@@ -305,4 +351,6 @@ def download_midi_from_google_drive(urls, file_names):
 
 
 if __name__ == "__main__":
-    normalize_my_melodies_csv(MY_MELODIES_CSV_PATH)
+    # main()
+    main_midi()
+    # normalize_my_melodies_csv(MY_MELODIES_CSV_PATH)

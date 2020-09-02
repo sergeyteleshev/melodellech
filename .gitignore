@@ -4,13 +4,11 @@ genre_dataset_reduced/*
 src/deutschl
 src/midi resources
 src/genre classificator/data_10.json
-src/file_dataset
-src/file_dataset.txt
-src/mapping.json
+src/output/*
 src/dataset
-src/clean_melodies_data.csv
+src/csv/clean_melodies_data.csv
 src/credentials.json
 src/metluha_loh.mid
-src/my_melodies.csv
+src/csv/my_melodies.csv
 src/token.pickle
 src/token_drive_v3.pickle

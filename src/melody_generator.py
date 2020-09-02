@@ -3,10 +3,17 @@ import json
 from preprocess import SEQUENCE_LENGTH, MAPPING_PATH
 import numpy as np
 import music21 as m21
+import random
+
+MELODIES_PATH = 'output/midi/'
+MODEL_PATH = 'models/model_midi.h5'
+SEED_MIN_LENGTH = 2
+SEED_MAX_LENGTH = 15
+
 
 class MelodyGenerator:
 
-    def __init__(self, model_path='model.h5'):
+    def __init__(self, model_path=MODEL_PATH):
         self.model_path = model_path
         self.model = keras.models.load_model(model_path)
 
@@ -23,6 +30,23 @@ class MelodyGenerator:
         index = np.random.choice(choices, p=probabilities)
 
         return index
+
+    def generate_random_seed(self):
+        seed = ""
+        seed_length = random.randint(SEED_MIN_LENGTH, SEED_MAX_LENGTH)
+        keys = []
+
+        with open(MAPPING_PATH, 'r') as json_file:
+            data = json.load(json_file)
+            if "/" in data:
+                del data['/']
+
+            keys = list(data.keys())
+
+        for i in range(seed_length):
+            seed += str(random.choice(keys)) + " "
+
+        return seed
 
     def generate_melody(self, seed, num_steps, max_sequence_length, temperature):
         """Generates a melody using the DL model and returns a midi file.
@@ -121,10 +145,21 @@ class MelodyGenerator:
         stream.write(format, file_name)
 
 
-if __name__ == '__main__':
+def generate_melodies(num_melodies):
     mg = MelodyGenerator()
-    seed = "67 _ _ _ 65 _ _ 69 _ _"
-    seed2 = "67 _ _ _ _ _ 65 _ 64 _ 62 _ 60 _ _ _"
-    melody = mg.generate_melody(seed2, 500, SEQUENCE_LENGTH, 0.3)
-    print(melody)
-    mg.save_melody(melody, file_name="metluha_loh.mid")
+    for i in range(num_melodies):
+        seed = mg.generate_random_seed()
+        melody = mg.generate_melody(seed, 64, SEQUENCE_LENGTH, 0.7)
+        mg.save_melody(melody, file_name=MELODIES_PATH + str(i + 1) + ".mid")
+        print("generated melody #" + i+1)
+
+
+if __name__ == '__main__':
+    # mg = MelodyGenerator()
+    # # seed = "67 _ _ _ 65 _ _ 69 _ _"
+    # # seed2 = "67 _ _ _ _ _ 65 _ 64 _ 62 _ 60 _ _ _"
+    # seed = mg.generate_random_seed()
+    # melody = mg.generate_melody(seed, 64, SEQUENCE_LENGTH, 0.7)
+    # print(melody)
+    # mg.save_melody(melody, file_name="metluha_loh.mid")
+    generate_melodies(10)
