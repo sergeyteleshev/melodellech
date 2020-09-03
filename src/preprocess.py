@@ -14,6 +14,9 @@ from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.http import MediaIoBaseDownload
 
+KERN_DATASET_PATHES = ["deutschl/allerkbd", "deutschl/altdeu1", "deutschl/altdeu2", "deutschl/boehme", "deutschl/dva",
+                       "deutschl/erk", "deutschl/fink", "deutschl/kinder", "deutschl/variant", "deutschl/zuccal"]
+
 KERN_DATASET_PATH = "deutschl/test"
 ACCEPTABLE_DURATIONS = [
     0.25, 0.5, 0.75, 1.0, 1.5, 2, 3, 4
@@ -113,7 +116,7 @@ def transpose(song):
     # get key from the song
     parts = song.getElementsByClass(m21.stream.Part)
     measures_part0 = parts[0].getElementsByClass(m21.stream.Measure)
-    key = []
+    key = measures_part0[0][4]
 
     # estimate key using music21
     if not isinstance(key, m21.key.Key):
@@ -174,9 +177,10 @@ def load_song(file_path):
     return song
 
 
-def create_single_file_dataset(dataset_path, file_dataset_path, sequence_length):
+def create_single_file_dataset(dataset_path, file_dataset_path, sequence_length, melody_dataset_path):
     new_song_delimiter = "/ " * sequence_length
     songs = ""
+    dataset_name = melody_dataset_path.split('/')[-1]
 
     # load encoded songs and add delimiters
     for path, _, files in os.walk(dataset_path):
@@ -189,14 +193,15 @@ def create_single_file_dataset(dataset_path, file_dataset_path, sequence_length)
     songs = songs[:-1]
 
     # save string that contains all the dataset
-    with open(file_dataset_path, "w") as fp:
+    with open(file_dataset_path + "_" + dataset_name, "w") as fp:
         fp.write(songs)
 
     return songs
 
 
-def create_mapping(songs, mapping_path):
+def create_mapping(songs, mapping_path, dataset_path):
     mappings = {}
+    dataset_name = dataset_path.split('/')[-1]
 
     # identify the vocabulary
     songs = songs.split()
@@ -207,7 +212,8 @@ def create_mapping(songs, mapping_path):
         mappings[symbol] = i
 
     # save voabulary to a json file
-    with open(mapping_path, "w") as fp:
+
+    with open(mapping_path.split(".json")[0] + "_" + dataset_name + ".json", "w") as fp:
         json.dump(mappings, fp, indent=4)
 
     return songs
@@ -258,10 +264,10 @@ def main_midi():
     print(inputs, targets)
 
 
-def main():
-    preprocess(KERN_DATASET_PATH)
-    songs = create_single_file_dataset(SAVE_DIR, SINGLE_FILE_DATASET, SEQUENCE_LENGTH)
-    create_mapping(songs, MAPPING_PATH)
+def main(dataset_path):
+    preprocess(dataset_path)
+    songs = create_single_file_dataset(SAVE_DIR, SINGLE_FILE_DATASET, SEQUENCE_LENGTH, dataset_path)
+    create_mapping(songs, MAPPING_PATH, dataset_path)
     inputs, targets = generate_training_sequences(SEQUENCE_LENGTH)
     print(inputs, targets)
 
@@ -351,6 +357,7 @@ def download_midis_from_google_drive(urls, file_names):
 
 
 if __name__ == "__main__":
-    # main()
-    main_midi()
+    main(KERN_DATASET_PATH)
+    for path in KERN_DATASET_PATHES:
+        main(path)
     # normalize_my_melodies_csv(MY_MELODIES_CSV_PATH)

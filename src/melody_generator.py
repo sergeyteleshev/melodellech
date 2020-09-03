@@ -6,9 +6,33 @@ import music21 as m21
 import random
 
 MELODIES_PATH = 'output/midi/'
-MODEL_PATH = 'models/model_midi.h5'
+MODEL_PATH = 'models/model_kern_ballad.h5'
 SEED_MIN_LENGTH = 2
 SEED_MAX_LENGTH = 15
+
+
+def generate_random_seed():
+    seed = ""
+    seed_length = random.randint(SEED_MIN_LENGTH, SEED_MAX_LENGTH)
+    keys = []
+    is_pause = False
+
+    with open(MAPPING_PATH, 'r') as json_file:
+        data = json.load(json_file)
+        if "/" in data:
+            del data['/']
+
+        keys = list(data.keys())
+
+    for i in range(seed_length):
+        if is_pause:
+            seed += "_ " * random.randint(1, 8)
+            is_pause = True
+        else:
+            seed += str(random.choice(keys)) + " "
+            is_pause = False
+
+    return seed
 
 
 class MelodyGenerator:
@@ -30,23 +54,6 @@ class MelodyGenerator:
         index = np.random.choice(choices, p=probabilities)
 
         return index
-
-    def generate_random_seed(self):
-        seed = ""
-        seed_length = random.randint(SEED_MIN_LENGTH, SEED_MAX_LENGTH)
-        keys = []
-
-        with open(MAPPING_PATH, 'r') as json_file:
-            data = json.load(json_file)
-            if "/" in data:
-                del data['/']
-
-            keys = list(data.keys())
-
-        for i in range(seed_length):
-            seed += str(random.choice(keys)) + " "
-
-        return seed
 
     def generate_melody(self, seed, num_steps, max_sequence_length, temperature):
         """Generates a melody using the DL model and returns a midi file.
@@ -148,17 +155,17 @@ class MelodyGenerator:
 def generate_melodies(num_melodies):
     mg = MelodyGenerator()
     for i in range(num_melodies):
-        seed = mg.generate_random_seed()
+        seed = generate_random_seed()
         melody = mg.generate_melody(seed, 64, SEQUENCE_LENGTH, 0.7)
         mg.save_melody(melody, file_name=MELODIES_PATH + str(i + 1) + ".mid")
-        print("generated melody #" + i+1)
+        print("generated melody #" + str(i + 1))
 
 
 if __name__ == '__main__':
     # mg = MelodyGenerator()
-    # # seed = "67 _ _ _ 65 _ _ 69 _ _"
+    # seed = "67 _ _ _ 65 _ _ 69 _ _"
     # # seed2 = "67 _ _ _ _ _ 65 _ 64 _ 62 _ 60 _ _ _"
-    # seed = mg.generate_random_seed()
+    # # seed = mg.generate_random_seed()
     # melody = mg.generate_melody(seed, 64, SEQUENCE_LENGTH, 0.7)
     # print(melody)
     # mg.save_melody(melody, file_name="metluha_loh.mid")

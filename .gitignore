@@ -1,10 +1,8 @@
 .idea
 venv
-genre_dataset_reduced/*
 src/deutschl
 src/midi resources
-src/genre classificator/data_10.json
-src/output/*
+src/output/midi/*
 src/dataset
 src/csv/clean_melodies_data.csv
 src/credentials.json

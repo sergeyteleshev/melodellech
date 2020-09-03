@@ -1,7 +1,7 @@
 from preprocess import generate_training_sequences, SEQUENCE_LENGTH
 import tensorflow.keras as keras
 
-OUTPUT_UNITS = 46
+OUTPUT_UNITS = 34
 LOSS = "sparse_categorical_crossentropy"
 LEARNING_RATE = 0.001
 NUM_UNITS = [256]
@@ -11,7 +11,7 @@ SAVE_MODEL_PATH = 'models/model_midi.h5'
 
 
 def build_model(output_units, num_units, loss, learning_rate):
-    input = keras.layers.Input(shape=(64, output_units))
+    input = keras.layers.Input(shape=(None, output_units))
     x = keras.layers.LSTM(num_units[0])(input)
     x = keras.layers.Dropout(0.2)(x)
 
