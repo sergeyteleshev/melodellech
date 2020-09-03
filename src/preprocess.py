@@ -15,18 +15,20 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.http import MediaIoBaseDownload
 
 KERN_DATASET_PATHES = ["deutschl/allerkbd", "deutschl/altdeu1", "deutschl/altdeu2", "deutschl/boehme", "deutschl/dva",
-                       "deutschl/erk", "deutschl/fink", "deutschl/kinder", "deutschl/variant", "deutschl/zuccal"]
+                       "deutschl/erk", "deutschl/fink", "deutschl/kinder", "deutschl/variant", "deutschl/zuccal",
+                       "deutschl/ballad"]
 
 KERN_DATASET_PATH = "deutschl/test"
+SINGLE_FILE_DATASET = "output/file_dataset"
+MAPPING_PATH = 'output/mapping.json'
+SAVE_DIR = "dataset"
+MY_MELODIES_CSV_PATH = "csv/my_melodies.csv"
+MIDI_MELODIES_PATH = "midi resources\\melodies"
+
 ACCEPTABLE_DURATIONS = [
     0.25, 0.5, 0.75, 1.0, 1.5, 2, 3, 4
 ]
-SAVE_DIR = "dataset"
-SINGLE_FILE_DATASET = "output/file_dataset"
 SEQUENCE_LENGTH = 64
-MAPPING_PATH = 'output/mapping.json'
-MY_MELODIES_CSV_PATH = "csv/my_melodies.csv"
-MIDI_MELODIES_PATH = "midi resources\\melodies"
 
 # google drive consts
 CLIENT_ID = "837354965689-3cgu6kg68fdg4gijgit7786msc4nt6ba.apps.googleusercontent.com"
@@ -71,7 +73,6 @@ def preprocess_midi(dataset_path):
     print(f"Loaded {len(songs)} songs.")
 
     for i, song in enumerate(songs):
-
         # filter out songs that have non-acceptable durations
         # if not has_acceptable_durations(song, ACCEPTABLE_DURATIONS):
         #     continue
@@ -177,10 +178,9 @@ def load_song(file_path):
     return song
 
 
-def create_single_file_dataset(dataset_path, file_dataset_path, sequence_length, melody_dataset_path):
+def create_single_file_dataset(dataset_path, file_dataset_path, sequence_length):
     new_song_delimiter = "/ " * sequence_length
     songs = ""
-    dataset_name = melody_dataset_path.split('/')[-1]
 
     # load encoded songs and add delimiters
     for path, _, files in os.walk(dataset_path):
@@ -193,15 +193,14 @@ def create_single_file_dataset(dataset_path, file_dataset_path, sequence_length,
     songs = songs[:-1]
 
     # save string that contains all the dataset
-    with open(file_dataset_path + "_" + dataset_name, "w") as fp:
+    with open(file_dataset_path, "w") as fp:
         fp.write(songs)
 
     return songs
 
 
-def create_mapping(songs, mapping_path, dataset_path):
+def create_mapping(songs, mapping_path=MAPPING_PATH):
     mappings = {}
-    dataset_name = dataset_path.split('/')[-1]
 
     # identify the vocabulary
     songs = songs.split()
@@ -213,16 +212,16 @@ def create_mapping(songs, mapping_path, dataset_path):
 
     # save voabulary to a json file
 
-    with open(mapping_path.split(".json")[0] + "_" + dataset_name + ".json", "w") as fp:
+    with open(mapping_path, "w") as fp:
         json.dump(mappings, fp, indent=4)
 
     return songs
 
 
-def convert_songs_to_int(songs):
+def convert_songs_to_int(songs, mapping_path=MAPPING_PATH):
     int_songs = []
 
-    with open(MAPPING_PATH, 'r') as fp:
+    with open(mapping_path, 'r') as fp:
         mappings = json.load(fp)
 
     songs = songs.split()
@@ -233,10 +232,10 @@ def convert_songs_to_int(songs):
     return int_songs
 
 
-def generate_training_sequences(sequence_length):
+def generate_training_sequences(sequence_length, single_file_dataset=SINGLE_FILE_DATASET, mapping_path=MAPPING_PATH):
     # load songs and map them to int
-    songs = load_song(SINGLE_FILE_DATASET)
-    int_songs = convert_songs_to_int(songs)
+    songs = load_song(single_file_dataset)
+    int_songs = convert_songs_to_int(songs, mapping_path=mapping_path)
 
     inputs = []
     targets = []
@@ -256,20 +255,26 @@ def generate_training_sequences(sequence_length):
     return inputs, targets
 
 
-def main_midi():
+def main_midi(dataset_path, mapping_path):
     preprocess_midi(MIDI_MELODIES_PATH)
-    songs = create_single_file_dataset(SAVE_DIR, SINGLE_FILE_DATASET, SEQUENCE_LENGTH)
-    create_mapping(songs, MAPPING_PATH)
-    inputs, targets = generate_training_sequences(SEQUENCE_LENGTH)
+    songs = create_single_file_dataset(SAVE_DIR, dataset_path, SEQUENCE_LENGTH)
+    create_mapping(songs, mapping_path=mapping_path)
+    inputs, targets = generate_training_sequences(SEQUENCE_LENGTH, single_file_dataset=SINGLE_FILE_DATASET,
+                                                  mapping_path=MAPPING_PATH)
     print(inputs, targets)
 
 
-def main(dataset_path):
+def main(dataset_path, mapping_path, single_file_dataset):
+    dataset_name = dataset_path.split('/')[-1]
+    single_file_dataset = single_file_dataset + "_" + dataset_name
+    mapping_path = mapping_path.split(".json")[0] + "_" + dataset_name + ".json"
+
     preprocess(dataset_path)
-    songs = create_single_file_dataset(SAVE_DIR, SINGLE_FILE_DATASET, SEQUENCE_LENGTH, dataset_path)
-    create_mapping(songs, MAPPING_PATH, dataset_path)
-    inputs, targets = generate_training_sequences(SEQUENCE_LENGTH)
-    print(inputs, targets)
+    songs = create_single_file_dataset(SAVE_DIR, single_file_dataset, SEQUENCE_LENGTH)
+    create_mapping(songs, mapping_path=mapping_path)
+    filelist = [f for f in os.listdir(SAVE_DIR)]
+    for f in filelist:
+        os.remove(os.path.join(SAVE_DIR, f))
 
 
 def normalize_my_melodies_csv(csv_path):
@@ -281,7 +286,8 @@ def normalize_my_melodies_csv(csv_path):
     file_names = []
     for i in range(len(df_uncleaned['timestamp'])):
         clean_file_name = str(i + 1) + " " + df_uncleaned['artist_name'][i] + " - " + df_uncleaned['song_name'][
-            i] + " ({})".format(df_uncleaned['instrument'][i]) + " " + str(df_uncleaned['bpm'][i]) + "bpm " + df_uncleaned['key'][i] + ".mid"
+            i] + " ({})".format(df_uncleaned['instrument'][i]) + " " + str(df_uncleaned['bpm'][i]) + "bpm " + \
+                          df_uncleaned['key'][i] + ".mid"
         clean_file_name = re.sub(r'[\\/*?:"<>|]', "", clean_file_name)
         file_names.append(clean_file_name)
 
@@ -357,7 +363,7 @@ def download_midis_from_google_drive(urls, file_names):
 
 
 if __name__ == "__main__":
-    main(KERN_DATASET_PATH)
+    main(KERN_DATASET_PATH, MAPPING_PATH, SINGLE_FILE_DATASET)
     for path in KERN_DATASET_PATHES:
-        main(path)
-    # normalize_my_melodies_csv(MY_MELODIES_CSV_PATH)
+        main(path, MAPPING_PATH, SINGLE_FILE_DATASET)
+    # # normalize_my_melodies_csv(MY_MELODIES_CSV_PATH)
