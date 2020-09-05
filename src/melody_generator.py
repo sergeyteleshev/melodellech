@@ -1,23 +1,26 @@
+import os
 import tensorflow.keras as keras
 import json
-from preprocess import SEQUENCE_LENGTH, MAPPING_PATH
+from preprocess import SEQUENCE_LENGTH, KERN_DATASET_PATHES
+from train import SAVE_MODEL_PATH, INPUT_DATA_PATH, MAPPING_NAME
 import numpy as np
 import music21 as m21
 import random
 
+MAPPING_PATH = 'output/mapping_erk.json'
 MELODIES_PATH = 'output/midi/'
-MODEL_PATH = 'models/model_kern_ballad.h5'
+MODEL_PATH = 'models/erk.h5'
 SEED_MIN_LENGTH = 2
 SEED_MAX_LENGTH = 15
 
 
-def generate_random_seed():
+def generate_random_seed(mapping_path=MAPPING_PATH):
     seed = ""
     seed_length = random.randint(SEED_MIN_LENGTH, SEED_MAX_LENGTH)
     keys = []
     is_pause = False
 
-    with open(MAPPING_PATH, 'r') as json_file:
+    with open(mapping_path, 'r') as json_file:
         data = json.load(json_file)
         if "/" in data:
             del data['/']
@@ -37,11 +40,12 @@ def generate_random_seed():
 
 class MelodyGenerator:
 
-    def __init__(self, model_path=MODEL_PATH):
+    def __init__(self, model_path=MODEL_PATH, mapping_path=MAPPING_PATH):
         self.model_path = model_path
         self.model = keras.models.load_model(model_path)
+        self.mapping_path = mapping_path
 
-        with open(MAPPING_PATH, 'r') as fp:
+        with open(mapping_path, 'r') as fp:
             self._mappings = json.load(fp)
 
         self._start_symbols = ["/"] * SEQUENCE_LENGTH
@@ -152,21 +156,34 @@ class MelodyGenerator:
         stream.write(format, file_name)
 
 
-def generate_melodies(num_melodies):
-    mg = MelodyGenerator()
+def generate_melodies(num_melodies, mg):
     for i in range(num_melodies):
-        seed = generate_random_seed()
+        seed = generate_random_seed(mapping_path=mg.mapping_path)
         melody = mg.generate_melody(seed, 64, SEQUENCE_LENGTH, 0.7)
-        mg.save_melody(melody, file_name=MELODIES_PATH + str(i + 1) + ".mid")
-        print("generated melody #" + str(i + 1))
+        mg_name = mg.model_path.split('/')[-1][:-3]
+        mg_save_path = MELODIES_PATH + mg_name
+
+        if not os.path.exists(mg_save_path):
+            os.mkdir(mg_save_path)
+
+        mg.save_melody(melody, file_name=mg_save_path + "/" + str(i + 1) + ".mid")
+        print("generated melody #" + str(i + 1) + ", using {} model".format(mg_name))
 
 
 if __name__ == '__main__':
-    # mg = MelodyGenerator()
+    models_path = [SAVE_MODEL_PATH + c.split('/')[-1] + ".h5" for c in KERN_DATASET_PATHES]
+    kern_dataset_genres = [c.split('/')[-1] for c in KERN_DATASET_PATHES]
+    mapping_pathes = [INPUT_DATA_PATH + MAPPING_NAME + "_" + c + ".json" for c in kern_dataset_genres]
+    models = [MelodyGenerator(model_path=p, mapping_path=mp) for p, mp in zip(models_path, mapping_pathes)]
+
+    for model in models:
+        generate_melodies(10, model)
+
+    # mg = MelodyGenerator(model_path='models/allerkbd.h5', mapping_path='output/mapping_allerkbd.json')
     # seed = "67 _ _ _ 65 _ _ 69 _ _"
     # # seed2 = "67 _ _ _ _ _ 65 _ 64 _ 62 _ 60 _ _ _"
     # # seed = mg.generate_random_seed()
     # melody = mg.generate_melody(seed, 64, SEQUENCE_LENGTH, 0.7)
     # print(melody)
     # mg.save_melody(melody, file_name="metluha_loh.mid")
-    generate_melodies(10)
+    # generate_melodies(10)
